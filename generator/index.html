@@ -1,0 +1,1476 @@
+<!doctype html>
+<!-- The panel is the approved DARK Rayl UI, so the system's tokens have to
+     resolve dark: the slider, the reel and every state colour come from them. -->
+<html lang="en" data-theme="dark" data-edition="web">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rayl Stack</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23696961'/%3E%3Ccircle cx='16' cy='16' r='8' fill='%23cfcfc1'/%3E%3C/svg%3E"
+    />
+    <!-- The design system, vendored. It brings the tokens and the movement; the
+         panel keeps its own colours, which invert selection deliberately. -->
+    <script src="./rayl.js"></script>
+    <script type="module" crossorigin src="./assets/index-Ci1sGstI.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-ColnaORU.css">
+  </head>
+  <!-- Held until the panel has settled and the type has arrived: see "starting"
+       in style.css. Set here rather than by script so it is true from the first
+       paint, which is the paint it exists to prevent. -->
+  <body class="starting">
+    <!--
+      A start that failed, said.
+
+      The panel is held back until the tool is up, so a tool that throws on its
+      way up is a window with an empty sheet and nothing else — and since what
+      it threw on is usually something it read from its own store, it does the
+      same on every launch after. This is not part of the tool, on purpose: it
+      has to work when the tool does not. It waits to be told the tool is up,
+      and if it has not been, says what was thrown and offers the one thing
+      that gets out of it, which is forgetting what was stored.
+    -->
+    <script>
+      (function () {
+        /* The try-out asked for on the address — see WEB in main.js. Said
+           on the page here, before anything is painted, so the curtain
+           (see .loading) is up from the first paint and not from the moment
+           the tool's own script arrives, which on a slow line is a second
+           or two of an empty sheet. The built try-out says it on the page
+           itself — see web/build.sh — and needs none of this. */
+        if (/[?&]web(?:[=&]|$)/.test(location.search))
+          document.documentElement.setAttribute("data-edition", "web");
+        /* And the try-out's size: one window of 2064 by 1161, scaled as a
+           whole to whatever it is shown in — see .window in style.css and
+           stageFit in main.js, which keeps this up as the page is resized.
+           Said here for the same reason as the edition: so the curtain is
+           the right size on the first paint. */
+        if (document.documentElement.getAttribute("data-edition") === "web")
+          document.documentElement.style.setProperty(
+            "--fit",
+            Math.min(innerWidth / 2064, innerHeight / 1161).toFixed(5),
+          );
+        var last = "";
+        addEventListener("error", function (e) {
+          if (!window.__up && e.message && !/ResizeObserver/.test(e.message))
+            last = e.message;
+        });
+        addEventListener("unhandledrejection", function (e) {
+          if (!window.__up)
+            last = String((e.reason && e.reason.message) || e.reason);
+        });
+        setTimeout(function () {
+          if (window.__up) return;
+          var box = document.getElementById("fault");
+          if (!box) return;
+          box.querySelector("p").textContent =
+            "Rayl Stack could not start" + (last ? ": " + last : ".");
+          box.hidden = false;
+          document.getElementById("startFresh").onclick = function () {
+            try {
+              localStorage.removeItem("rayl-stack:settings");
+            } catch (e) {}
+            location.replace(location.pathname);
+          };
+        }, 8000);
+      })();
+    </script>
+    <!-- The window: the picture and the panel side by side. In the app it
+         is nothing — the page itself is the window, and this takes no part
+         in the layout. In the try-out it is the whole tool as one piece of a
+         fixed shape, 16 by 9, scaled to fit wherever it is shown — see
+         .window in style.css. -->
+    <div class="window" id="window">
+      <!-- The try-out's curtain: the page as a whole, held behind the panel's
+         ground with a bar on it until the models, the room, the type and the
+         first frame are all in, then taken away — see `loading` in main.js.
+         Without it the try-out came up in pieces: a sheet with nothing on
+         it, plates arriving a model at a time, the lighting changing when the
+         room landed, and the panel last. -->
+      <div class="loading" id="loading" aria-hidden="true">
+        <img src="./rayl-lockup.svg" alt="" />
+        <div class="loading-bar"><i></i></div>
+      </div>
+      <main class="frame">
+        <!-- The window's three buttons, drawn: for the try-out on the web, which
+           has no window of its own and is meant to look like the tool in one.
+           They close, shrink and grow nothing. The app hides these and shows
+           the system's, placed where these are — see placeLights in
+           app/main.swift. -->
+        <div class="lights" aria-hidden="true">
+          <i class="close"></i>
+          <i class="shrink"></i>
+          <i class="grow"></i>
+        </div>
+        <!-- The picture, as a sheet laid on the ground rather than the ground
+           itself: node 1828:822. Sized by main.js to the chosen ratio, as large
+           as the margins allow, and everything that is said about the picture
+           is said on it. -->
+        <div class="picture" id="picture">
+          <canvas id="stage"></canvas>
+          <output class="status" id="status" aria-live="polite" hidden></output>
+          <button
+            type="button"
+            class="hint"
+            id="hint"
+            aria-label="What the keys and the mouse do"
+          >
+            ?
+          </button>
+        </div>
+
+        <!--
+        The loop, as a ruler along the bottom of the frame: node 1911:3947.
+
+        A line saying what it is and how long, a row of ticks, and one tick
+        that is taller than the rest and carries the number of the frame on
+        show — the same shape a slider's value rides in, hung from a stem. It
+        follows the motion, and taking hold of the row moves the motion to
+        where the pointer is. The ticks are a ruler and not a count: as many
+        as the width holds, however many frames the loop has.
+      -->
+        <div class="timeline" id="timeline">
+          <div class="timeline-says">
+            <span>Timeline</span>
+            <span id="timelineCount"></span>
+          </div>
+          <div
+            class="timeline-ticks"
+            id="timelineTicks"
+            role="slider"
+            tabindex="0"
+            aria-label="Frame"
+            aria-valuemin="1"
+          >
+            <span class="timeline-head" id="timelineHead">
+              <svg
+                aria-hidden="true"
+                width="64"
+                height="40"
+                viewBox="-32 0 64 40"
+              >
+                <path id="timelineShape"></path>
+              </svg>
+              <b id="timelineFrame"></b>
+            </span>
+          </div>
+        </div>
+
+        <!--
+        Everything the tool can be told that is not a control in the panel.
+
+        Which is a great deal of it: the transport, the export, undo, presets,
+        posing a stack by dragging it, moving a light by dragging its handle,
+        typing a number instead of hunting for it with a slider. None of that
+        announced itself anywhere, so it existed only for somebody who had been
+        told — and a tool whose good half is undiscoverable is a tool with a
+        worse half.
+      -->
+        <div class="fault" id="fault" hidden>
+          <p></p>
+          <button type="button" class="btn" id="startFresh">Start Fresh</button>
+        </div>
+
+        <div class="guide" id="guide" hidden>
+          <div
+            class="card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Shortcuts"
+          >
+            <h2>Doing</h2>
+            <dl>
+              <dt><kbd>Space</kbd></dt>
+              <dd>Stop the motion, and start it again</dd>
+              <dt>Drag the timeline</dt>
+              <dd>Moves the loop to that frame, and holds it there</dd>
+              <dt><kbd>⌘</kbd><kbd>E</kbd></dt>
+              <dd>
+                Render — again, or <kbd>esc</kbd>, to cancel. <kbd>fn</kbd
+                ><kbd>F12</kbd> does the same
+              </dd>
+              <dt><kbd>⌘</kbd><kbd>Z</kbd></dt>
+              <dd>Undo, and <kbd>⇧</kbd> with it to redo</dd>
+              <dt><kbd>⇧</kbd><kbd>⌘</kbd><kbd>D</kbd></dt>
+              <dd>Every control there is, and back to the short panel</dd>
+            </dl>
+
+            <h2>The stack</h2>
+            <dl>
+              <dt><kbd>⇧</kbd>Wheel</dt>
+              <dd>How many neighbours come along</dd>
+              <dt>Click a number</dt>
+              <dd>
+                Types it — <kbd>↵</kbd> to keep, <kbd>esc</kbd> to drop it
+              </dd>
+            </dl>
+
+            <h2>The view</h2>
+            <dl>
+              <dt>Wheel</dt>
+              <dd>Closer and further</dd>
+              <dt>Drag</dt>
+              <dd>Moves the framing, from anywhere in the picture</dd>
+              <dt><kbd>⇧</kbd>Drag</dt>
+              <dd>The same, and it catches on the middle of the frame</dd>
+              <dt>Drag a lamp</dt>
+              <dd>
+                Moves the light; the wheel then sends it nearer or further
+              </dd>
+            </dl>
+
+            <h2>Keeping</h2>
+            <dl>
+              <dt><kbd>⌘</kbd><kbd>S</kbd></dt>
+              <dd>Writes everything down, over the file you are in</dd>
+              <dt><kbd>⇧</kbd><kbd>⌘</kbd><kbd>S</kbd></dt>
+              <dd>Asks where to put a new one</dd>
+              <dt><kbd>⌘</kbd><kbd>L</kbd></dt>
+              <dd>Reads one back — or drop it on the window</dd>
+              <dt>Drop an .hdr</dt>
+              <dd>Becomes the room the stack stands in</dd>
+            </dl>
+
+            <p class="dismiss"><kbd>?</kbd> or <kbd>esc</kbd></p>
+          </div>
+        </div>
+      </main>
+
+      <aside class="panel">
+        <div class="mark">
+          <img src="./rayl-lockup.svg" alt="Rayl" />
+        </div>
+
+        <div class="scroll">
+          <section class="group">
+            <h2>Array</h2>
+            <div class="rows">
+              <label class="ctl">
+                <span>Count</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="count"
+                    min="1"
+                    max="96"
+                    step="1"
+                    value="24"
+                  />
+                  <input
+                    class="nub"
+                    id="countOut"
+                    value="24"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Spacing</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="spread"
+                    min="-0.95"
+                    max="1.6"
+                    step="0.01"
+                    value="-0.86"
+                  />
+                  <input
+                    class="nub"
+                    id="spreadOut"
+                    value="0.14"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Angle</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="lean"
+                    min="-60"
+                    max="60"
+                    step="1"
+                    value="0"
+                  />
+                  <input
+                    class="nub"
+                    id="leanOut"
+                    value="0&deg;"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Rotation</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="spin"
+                    min="-180"
+                    max="180"
+                    step="1"
+                    value="68"
+                  />
+                  <input
+                    class="nub"
+                    id="spinOut"
+                    value="68&deg;"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Tilt</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="tilt"
+                    min="-90"
+                    max="90"
+                    step="1"
+                    value="0"
+                  />
+                  <input
+                    class="nub"
+                    id="tiltOut"
+                    value="0&deg;"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Brush</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="brush"
+                    min="0"
+                    max="16"
+                    step="0.5"
+                    value="3"
+                  />
+                  <input
+                    class="nub"
+                    id="brushOut"
+                    value="3.0"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+            </div>
+            <!-- Plates and baskets, for now. The card and the ring are put away
+               rather than taken out: the renderer still knows both, a file that
+               says one still opens as one, and each comes back by losing its
+               `hidden`. -->
+            <div class="segmented" data-select="object">
+              <button type="button" class="btn" data-value="0" data-on="true">
+                Plates
+              </button>
+              <button type="button" class="btn" data-value="1">Baskets</button>
+              <button type="button" class="btn" data-value="2" hidden>
+                Cards
+              </button>
+              <button type="button" class="btn" data-value="3" hidden>
+                Circles
+              </button>
+            </div>
+            <div class="segmented" data-select="direction">
+              <button type="button" class="btn" data-value="1">Up</button>
+              <button type="button" class="btn" data-value="0" data-on="true">
+                Across
+              </button>
+            </div>
+            <h2>Arrangements</h2>
+            <!-- The same previews the short panel recalls, for the ratio that
+               is up — see the handler in main.js. `data-preset` names the
+               older arrangement each falls back on. -->
+            <div class="row" data-presets>
+              <button
+                type="button"
+                class="btn"
+                data-preset="plates horizontal"
+                data-object="0"
+                data-direction="0"
+              >
+                plates across
+              </button>
+              <button
+                type="button"
+                class="btn"
+                data-preset="plates vertical"
+                data-object="0"
+                data-direction="1"
+              >
+                plates up
+              </button>
+              <button
+                type="button"
+                class="btn"
+                data-preset="baskets horizontal"
+                data-object="1"
+                data-direction="0"
+              >
+                baskets across
+              </button>
+              <button
+                type="button"
+                class="btn"
+                data-preset="baskets vertical"
+                data-object="1"
+                data-direction="1"
+              >
+                baskets up
+              </button>
+            </div>
+            <button type="button" class="btn full" id="resetOffsets">
+              Reset Positions
+            </button>
+          </section>
+
+          <section class="group">
+            <h2>Surface</h2>
+            <div class="rows">
+              <div class="segmented" data-select="finish">
+                <button type="button" class="btn" data-value="0" data-on="true">
+                  Solid
+                </button>
+                <button type="button" class="btn" data-value="1">
+                  Gradient
+                </button>
+              </div>
+              <label class="ctl" data-needs="solid">
+                <span>Colour</span>
+                <input type="color" id="color" value="#f7f5f1" />
+                <output id="colorOut" hidden>#f7f5f1</output>
+              </label>
+              <!-- Top first, since the sweep is described the way it is seen. -->
+              <label class="ctl" data-needs="graded">
+                <span>Top</span>
+                <input type="color" id="colorHigh" value="#f0f0e5" />
+                <output id="colorHighOut" hidden>#f0f0e5</output>
+              </label>
+              <label class="ctl" data-needs="graded">
+                <span>Bottom</span>
+                <input type="color" id="colorLow" value="#8a8a84" />
+                <output id="colorLowOut" hidden>#8a8a84</output>
+              </label>
+              <label class="ctl">
+                <span>Translucency</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="translucency"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.55"
+                  />
+                  <input
+                    class="nub"
+                    id="translucencyOut"
+                    value="0.55"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Scatter</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="scatter"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.28"
+                  />
+                  <input
+                    class="nub"
+                    id="scatterOut"
+                    value="0.28"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Wrap</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="wrap"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.35"
+                  />
+                  <input
+                    class="nub"
+                    id="wrapOut"
+                    value="0.35"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Falloff</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="falloff"
+                    min="0.5"
+                    max="8"
+                    step="0.1"
+                    value="2"
+                  />
+                  <input
+                    class="nub"
+                    id="falloffOut"
+                    value="2.0"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Glaze</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="coat"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0"
+                  />
+                  <input
+                    class="nub"
+                    id="coatOut"
+                    value="0"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Roughness</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="roughness"
+                    min="0.02"
+                    max="1"
+                    step="0.01"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="roughnessOut"
+                    value="1.00"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Transparency</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="transparency"
+                    min="0"
+                    max="0.95"
+                    step="0.01"
+                    value="0"
+                  />
+                  <input
+                    class="nub"
+                    id="transparencyOut"
+                    value="0"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="clear">
+                <span>Frost</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="frost"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0"
+                  />
+                  <input
+                    class="nub"
+                    id="frostOut"
+                    value="0"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="printed" hidden>
+                <span>Depth</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="depth"
+                    min="0.005"
+                    max="0.2"
+                    step="0.005"
+                    value="0.05"
+                  />
+                  <input
+                    class="nub"
+                    id="depthOut"
+                    value="0.05"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="ringed" hidden>
+                <span>Radius</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="radius"
+                    min="0.02"
+                    max="0.6"
+                    step="0.005"
+                    value="0.18"
+                  />
+                  <input
+                    class="nub"
+                    id="radiusOut"
+                    value="0.05"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="printed" hidden>
+                <span>Ink</span>
+                <input type="color" id="ink" value="#3f3f3b" />
+                <output id="inkOut" hidden>#3f3f3b</output>
+              </label>
+              <label class="ctl" data-needs="printed" hidden>
+                <span>Design</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="design"
+                    min="1"
+                    max="6"
+                    step="1"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="designOut"
+                    value="1"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="printed" hidden>
+                <span>Artwork</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="print"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="printOut"
+                    value="1.00"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Variation</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="variation"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value="0.5"
+                  />
+                  <input
+                    class="nub"
+                    id="variationOut"
+                    value="0.50"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Motion</h2>
+            <div class="segmented" data-select="motion">
+              <button type="button" class="btn" data-value="1">Loop</button>
+              <button type="button" class="btn" data-value="0" data-on="true">
+                Ping-Pong
+              </button>
+              <button type="button" class="btn" data-value="2">Sine</button>
+            </div>
+            <div class="rows">
+              <label class="ctl">
+                <span>Wave</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="wave"
+                    min="0"
+                    max="3"
+                    step="0.01"
+                    value="0.8"
+                  />
+                  <input
+                    class="nub"
+                    id="waveOut"
+                    value="0.80"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Peaks</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="peaks"
+                    min="1"
+                    max="6"
+                    step="1"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="peaksOut"
+                    value="1"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Cycles</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="waveTurns"
+                    min="1"
+                    max="8"
+                    step="1"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="waveTurnsOut"
+                    value="1x"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Duration</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="waveSeconds"
+                    min="1"
+                    max="20"
+                    step="0.5"
+                    value="6"
+                  />
+                  <input
+                    class="nub"
+                    id="waveSecondsOut"
+                    value="6.0s"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+            </div>
+            <div class="stack">
+              <div class="ease">
+                <i class="ease-dot" id="easeA"></i>
+                <i class="ease-dot" id="easeB"></i>
+              </div>
+              <input
+                type="text"
+                class="ease-field"
+                id="ease"
+                spellcheck="false"
+                value="0, 0.707, 1, 0.342"
+              />
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Lighting</h2>
+            <div class="row" data-lighting>
+              <button type="button" class="btn" data-light="bisque soft">
+                bisque soft
+              </button>
+              <button type="button" class="btn" data-light="bisque side">
+                bisque side
+              </button>
+              <button type="button" class="btn" data-light="bisque low">
+                bisque low
+              </button>
+              <button type="button" class="btn" data-light="sheen front">
+                sheen front
+              </button>
+              <button type="button" class="btn" data-light="sheen raking">
+                sheen raking
+              </button>
+              <button type="button" class="btn" data-light="sheen rim">
+                sheen rim
+              </button>
+              <button type="button" class="btn" data-light="chalk high">
+                chalk high
+              </button>
+              <button type="button" class="btn" data-light="chalk wide">
+                chalk wide
+              </button>
+              <button type="button" class="btn" data-light="chalk flat">
+                chalk flat
+              </button>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Key</h2>
+            <div class="rows">
+              <label class="ctl">
+                <span>On</span>
+                <input type="checkbox" id="keyOn" checked />
+                <output for="keyOn" hidden>on</output>
+              </label>
+              <label class="ctl" data-needs="key">
+                <span>Intensity</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="key"
+                    min="0"
+                    max="8"
+                    step="0.05"
+                    value="1.60"
+                  />
+                  <input
+                    class="nub"
+                    id="keyOut"
+                    value="1.60"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="key">
+                <span>Size</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="keySize"
+                    min="0"
+                    max="1.5"
+                    step="0.01"
+                    value="0.35"
+                  />
+                  <input
+                    class="nub"
+                    id="keySizeOut"
+                    value="0.35"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="key">
+                <span>Colour</span>
+                <input type="color" id="keyColor" value="#eaeae5" />
+                <output id="keyColorOut" hidden>#eaeae5</output>
+              </label>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Fill</h2>
+            <div class="rows">
+              <label class="ctl">
+                <span>On</span>
+                <input type="checkbox" id="fillOn" checked />
+                <output for="fillOn" hidden>on</output>
+              </label>
+              <label class="ctl" data-needs="fill">
+                <span>Intensity</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="fill"
+                    min="0"
+                    max="4"
+                    step="0.05"
+                    value="0.35"
+                  />
+                  <input
+                    class="nub"
+                    id="fillOut"
+                    value="0.35"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="fill">
+                <span>Size</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="fillSize"
+                    min="0"
+                    max="1.5"
+                    step="0.01"
+                    value="0.60"
+                  />
+                  <input
+                    class="nub"
+                    id="fillSizeOut"
+                    value="0.60"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="fill">
+                <span>Colour</span>
+                <input type="color" id="fillColor" value="#d1d5bc" />
+                <output id="fillColorOut" hidden>#d1d5bc</output>
+              </label>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Edge</h2>
+            <div class="rows">
+              <label class="ctl">
+                <span>On</span>
+                <input type="checkbox" id="rimOn" checked />
+                <output for="rimOn" hidden>on</output>
+              </label>
+              <label class="ctl" data-needs="rim">
+                <span>Intensity</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="rim"
+                    min="0"
+                    max="6"
+                    step="0.05"
+                    value="3.20"
+                  />
+                  <input
+                    class="nub"
+                    id="rimOut"
+                    value="3.20"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="rim">
+                <span>Size</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="rimSize"
+                    min="0"
+                    max="1.5"
+                    step="0.01"
+                    value="0.25"
+                  />
+                  <input
+                    class="nub"
+                    id="rimSizeOut"
+                    value="0.25"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl" data-needs="rim">
+                <span>Colour</span>
+                <input type="color" id="rimColor" value="#eaeae5" />
+                <output id="rimColorOut" hidden>#eaeae5</output>
+              </label>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Room</h2>
+            <div class="segmented" data-select="room">
+              <button type="button" class="btn" data-value="0" data-on="true">
+                Painted
+              </button>
+              <button type="button" class="btn" data-value="1">Softbox</button>
+              <button type="button" class="btn" data-value="2">Lamp</button>
+            </div>
+            <div class="rows">
+              <label class="ctl">
+                <span>Environment</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="ambient"
+                    min="0"
+                    max="2"
+                    step="0.01"
+                    value="0.35"
+                  />
+                  <input
+                    class="nub"
+                    id="ambientOut"
+                    value="0.35"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Bounce</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="bounce"
+                    min="0"
+                    max="2"
+                    step="0.01"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="bounceOut"
+                    value="1.00"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Occlusion</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="occlusion"
+                    min="0"
+                    max="2"
+                    step="0.01"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="occlusionOut"
+                    value="1.00"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Grade</h2>
+            <div class="rows">
+              <label class="ctl">
+                <span>Exposure</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="exposure"
+                    min="0.2"
+                    max="2"
+                    step="0.01"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="exposureOut"
+                    value="1.00"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Contrast</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="contrast"
+                    min="0.5"
+                    max="2"
+                    step="0.01"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="contrastOut"
+                    value="1.00"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Glow</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="glow"
+                    min="0"
+                    max="0.3"
+                    step="0.005"
+                    value="0.06"
+                  />
+                  <input
+                    class="nub"
+                    id="glowOut"
+                    value="0.06"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+            </div>
+            <div class="segmented" data-select="tone">
+              <button type="button" class="btn" data-value="1" data-on="true">
+                Neutral
+              </button>
+              <button type="button" class="btn" data-value="0">Filmic</button>
+              <button type="button" class="btn" data-value="2">AgX</button>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>View</h2>
+            <div class="segmented" data-select="projection">
+              <button type="button" class="btn" data-value="1" data-on="true">
+                Isometric
+              </button>
+              <button type="button" class="btn" data-value="0">
+                Perspective
+              </button>
+            </div>
+            <div class="rows">
+              <label class="ctl" data-needs="lens">
+                <span>Lens</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="fov"
+                    min="6"
+                    max="70"
+                    step="1"
+                    value="32"
+                  />
+                  <input
+                    class="nub"
+                    id="fovOut"
+                    value="32&deg;"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+            </div>
+            <button type="button" class="btn full" id="resetView">
+              Fit to Frame
+            </button>
+          </section>
+
+          <section class="group">
+            <h2>Render</h2>
+            <div class="rows">
+              <label class="ctl">
+                <span>Preview scale</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="preview"
+                    min="0.25"
+                    max="1"
+                    step="0.05"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="previewOut"
+                    value="1"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Render scale</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="renderScale"
+                    min="1"
+                    max="2"
+                    step="0.25"
+                    value="1"
+                  />
+                  <input
+                    class="nub"
+                    id="renderScaleOut"
+                    value="1.00x"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <section class="group">
+            <h2>Format</h2>
+            <div class="segmented" data-select="format">
+              <button type="button" class="btn" data-value="1">MP4</button>
+              <button type="button" class="btn" data-value="0" data-on="true">
+                PNG
+              </button>
+              <button type="button" class="btn" data-value="2">Frames</button>
+            </div>
+            <h2>Aspect Ratio</h2>
+            <div class="segmented wide" data-select="aspect">
+              <button type="button" class="btn" data-value="0.8">4:5</button>
+              <button type="button" class="btn" data-value="1.25">5:4</button>
+              <button type="button" class="btn" data-value="1" data-on="true">
+                1:1
+              </button>
+              <button type="button" class="btn" data-value="1.7778">
+                16:9
+              </button>
+              <button type="button" class="btn" data-value="0.5625">
+                9:16
+              </button>
+              <button type="button" class="btn" data-value="1.5">3:2</button>
+              <button type="button" class="btn" data-value="2.3333">
+                21:9
+              </button>
+              <button type="button" class="btn" data-value="0">Window</button>
+            </div>
+            <div class="rows">
+              <!-- On, the picture is a sheet cut to its ratio with the panel's
+                 ground around it. Off, the canvas runs to the edges of the
+                 window with nothing drawn over it. -->
+              <label class="ctl">
+                <span>Passe-partout</span>
+                <input type="checkbox" id="matte" checked />
+                <output for="matte" hidden>on</output>
+              </label>
+              <label class="ctl">
+                <span>Width</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="width"
+                    min="640"
+                    max="8000"
+                    step="10"
+                    value="2400"
+                  />
+                  <input
+                    class="nub"
+                    id="widthOut"
+                    value="2400"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Height</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="height"
+                    min="640"
+                    max="8000"
+                    step="10"
+                    value="2400"
+                  />
+                  <input
+                    class="nub"
+                    id="heightOut"
+                    value="2400"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Oversample</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="over"
+                    min="1"
+                    max="3"
+                    step="1"
+                    value="2"
+                  />
+                  <input
+                    class="nub"
+                    id="overOut"
+                    value="2x"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>FPS</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="fps"
+                    data-needs="moving"
+                    min="12"
+                    max="60"
+                    step="1"
+                    value="60"
+                  />
+                  <input
+                    class="nub"
+                    id="fpsOut"
+                    value="60"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Bitrate</span>
+                <span class="track">
+                  <input
+                    type="range"
+                    id="videoQuality"
+                    data-needs="video"
+                    min="2"
+                    max="40"
+                    step="1"
+                    value="17"
+                  />
+                  <input
+                    class="nub"
+                    id="videoQualityOut"
+                    value="17"
+                    readonly
+                    inputmode="decimal"
+                  />
+                </span>
+              </label>
+              <label class="ctl">
+                <span>Alpha</span>
+                <input type="checkbox" id="alpha" data-needs="cutout" checked />
+                <output for="alpha" hidden>on</output>
+              </label>
+            </div>
+            <div class="stack">
+              <button type="button" class="btn full" id="exportImage">
+                Export
+              </button>
+              <button type="button" class="btn full" id="resetAll">
+                Reset Everything
+              </button>
+              <input
+                type="text"
+                class="ease-field"
+                id="settings"
+                spellcheck="false"
+                aria-label="settings"
+              />
+              <button type="button" class="btn full" id="copySettings">
+                Copy Link
+              </button>
+              <button type="button" class="btn full" id="savePreset">
+                Save Preset
+              </button>
+              <button type="button" class="btn full" id="loadPreset">
+                Load Preset
+              </button>
+            </div>
+          </section>
+
+          <!-- Who made the tool, and where to ask about it. At the foot of the
+             long panel and nowhere else: the short one is for making
+             pictures, and whoever has a question about how it works is in
+             this one. -->
+          <section class="group">
+            <h2>Made by</h2>
+            <div class="rows">
+              <div class="ctl">
+                <span>Typograaf (Martijn Mertens)</span>
+              </div>
+              <div class="ctl">
+                <span>Website / Contact</span>
+                <a class="credit" id="credit" href="https://www.typografie.be"
+                  >www.typografie.be</a
+                >
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="dock">
+          <button type="button" class="icon" id="savePreset2" title="Save">
+            <span class="glyph save"></span>
+          </button>
+          <button type="button" class="icon" id="download" title="Download">
+            <span class="glyph download"></span>
+          </button>
+          <button type="button" class="btn grow" id="resetSaved">
+            Reset Positions
+          </button>
+        </div>
+      </aside>
+    </div>
+
+  </body>
+</html>
