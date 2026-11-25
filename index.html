@@ -43,6 +43,7 @@
       }
 
       img,
+      video,
       iframe {
         display: block;
         width: 100%;
@@ -50,7 +51,8 @@
         border: 0;
       }
 
-      img {
+      img,
+      video {
         object-fit: cover;
       }
 
@@ -108,14 +110,29 @@
   <body>
     <main>
       <div class="tile">
-        <img
-          src="assets/hero.webp"
-          alt="Rayl — flexible work, sorted. A row of baskets, with: Ready to get your work sorted?"
-        />
+        <video
+          src="assets/hero.mp4"
+          poster="assets/hero.jpg"
+          aria-label="Rayl — flexible work, sorted. A row of baskets, with: Ready to get your work sorted?"
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="auto"
+        ></video>
       </div>
 
       <div class="pair">
-        <div><img src="assets/mark.webp" alt="The Rayl mark" /></div>
+        <div><video
+          src="assets/mark.mp4"
+          poster="assets/mark.jpg"
+          aria-label="The Rayl mark"
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="auto"
+        ></video></div>
         <div>
           <img
             src="assets/tablet.webp"
@@ -126,11 +143,16 @@
       </div>
 
       <div class="tile">
-        <img
-          src="assets/process.webp"
-          alt="Four windows of the Rayl generator, with plates and baskets in different arrangements"
-          loading="lazy"
-        />
+        <video
+          src="assets/process.mp4"
+          poster="assets/process.jpg"
+          aria-label="Four windows of the Rayl generator, with plates and baskets in different arrangements"
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="none"
+        ></video>
       </div>
 
       <div class="tile">
@@ -181,11 +203,16 @@
       </div>
 
       <div class="tile">
-        <img
-          src="assets/variants.webp"
-          alt="The Rayl key visual laid out across several formats"
-          loading="lazy"
-        />
+        <video
+          src="assets/variants.mp4"
+          poster="assets/variants.jpg"
+          aria-label="The Rayl key visual laid out across several formats"
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="none"
+        ></video>
       </div>
 
       <div class="tile live">
@@ -225,5 +252,19 @@
         <img src="assets/car.webp" alt="A Rayl car" loading="lazy" />
       </div>
     </main>
+    <script>
+      /* The films further down are not fetched until they are nearly in
+         view, and none of them runs while it is out of sight. */
+      const seen = new IntersectionObserver(
+        (entries) => {
+          for (const { target, isIntersecting } of entries) {
+            if (isIntersecting) target.play().catch(() => {});
+            else target.pause();
+          }
+        },
+        { rootMargin: "400px 0px" },
+      );
+      for (const film of document.querySelectorAll("video")) seen.observe(film);
+    </script>
   </body>
 </html>
